@@ -1,0 +1,604 @@
+// Project Management System Database Schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ============================================
+// USER MANAGEMENT & AUTHENTICATION
+// ============================================
+
+// Users table
+model User {
+  id            String    @id @default(uuid())
+  firstName     String
+  lastName      String
+  email         String    @unique
+  passwordHash  String
+  avatar        String?
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  roles              UserRole[]
+  projectsLead       Project[]          @relation("ProjectLead")
+  projectsCreated    Project[]          @relation("ProjectCreator")
+  projectNotes       ProjectNote[]
+  projectComments    ProjectComment[]
+  attachmentsCreated Attachment[]
+  messagesCreated    ChatMessage[]
+  sessions           Session[]
+  connectedEmailAccounts ConnectedEmailAccount[]
+}
+
+// Roles table
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  permissions String   // JSON array of permissions
+  isSystem    Boolean  @default(false) // System roles cannot be deleted
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       UserRole[]
+}
+
+// User-Role junction table (many-to-many)
+model UserRole {
+  userId    String
+  roleId    String
+  assignedAt DateTime @default(now())
+
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+// Sessions for authentication
+model Session {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ============================================
+// ORGANIZATIONAL STRUCTURE
+// ============================================
+
+// Entities table
+model Entity {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String?
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projects    Project[]
+  departments Department[]
+}
+
+// Departments table
+model Department {
+  id          String   @id @default(uuid())
+  name        String
+  code        String?
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  entityId    String?
+  entity      Entity?  @relation(fields: [entityId], references: [id])
+
+  projects    Project[]
+}
+
+// Categories table
+model Category {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String?
+  description String?
+  color       String   @default("#6B7280")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projects    Project[]
+}
+
+// Applications table (for tracking impacted applications)
+model Application {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  vendor      String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projects    ProjectApplication[]
+}
+
+// Integration systems table
+model Integration {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  type        String?  // API, File Transfer, Database, etc.
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projects    ProjectIntegration[]
+}
+
+// ============================================
+// PROJECTS (ENHANCED)
+// ============================================
+
+// Projects table
+model Project {
+  id                    String    @id @default(uuid())
+  name                  String
+  description           String?
+  status                String    @default("planning") // planning, active, on-hold, completed, cancelled
+  priority              String    @default("medium") // low, medium, high, critical
+  queue                 Int       @default(0) // 0, 1, 2, 3, 4
+  startDate             DateTime
+  endDate               DateTime  // Projected End Date
+  businessRequirementDate DateTime?
+  budget                Float     @default(0)
+  spentBudget           Float     @default(0)
+  color                 String    @default("#3B82F6")
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Organization relations
+  entityId              String?
+  entity                Entity?   @relation(fields: [entityId], references: [id])
+
+  departmentId          String?
+  department            Department? @relation(fields: [departmentId], references: [id])
+
+  categoryId            String?
+  category              Category? @relation(fields: [categoryId], references: [id])
+
+  // User relations
+  projectLeadId         String?
+  projectLead           User?     @relation("ProjectLead", fields: [projectLeadId], references: [id])
+
+  createdById           String?
+  createdBy             User?     @relation("ProjectCreator", fields: [createdById], references: [id])
+
+  // Related data
+  tasks                 Task[]
+  milestones            Milestone[]
+  resources             ResourceAllocation[]
+  budgetItems           BudgetItem[]
+  risks                 Risk[]
+  notes                 Note[]
+  projectNotes          ProjectNote[]
+  applications          ProjectApplication[]
+  integrations          ProjectIntegration[]
+  attachments           Attachment[]
+  chatMessages          ChatMessage[]
+}
+
+// Tasks table
+model Task {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  status      String    @default("todo") // todo, in-progress, review, done
+  priority    String    @default("medium") // low, medium, high, critical
+  startDate   DateTime
+  endDate     DateTime
+  progress    Int       @default(0) // 0-100
+  estimatedHours Float  @default(0)
+  actualHours Float     @default(0)
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  parentId    String?
+  parent      Task?     @relation("Subtasks", fields: [parentId], references: [id], onDelete: Cascade)
+  subtasks    Task[]    @relation("Subtasks")
+  
+  milestoneId String?
+  milestone   Milestone? @relation(fields: [milestoneId], references: [id])
+  
+  assigneeId  String?
+  assignee    Resource?  @relation(fields: [assigneeId], references: [id])
+  
+  dependencies TaskDependency[] @relation("DependentTask")
+  dependents   TaskDependency[] @relation("DependencyTask")
+  
+  timeEntries TimeEntry[]
+  comments    Comment[]
+  tags        TaskTag[]
+}
+
+// Task Dependencies
+model TaskDependency {
+  id              String @id @default(uuid())
+  dependentTaskId String
+  dependencyTaskId String
+  type            String @default("finish-to-start") // finish-to-start, start-to-start, finish-to-finish, start-to-finish
+  lagDays         Int    @default(0)
+  
+  dependentTask   Task   @relation("DependentTask", fields: [dependentTaskId], references: [id], onDelete: Cascade)
+  dependencyTask  Task   @relation("DependencyTask", fields: [dependencyTaskId], references: [id], onDelete: Cascade)
+  
+  @@unique([dependentTaskId, dependencyTaskId])
+}
+
+// Milestones
+model Milestone {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  dueDate     DateTime
+  completed   Boolean  @default(false)
+  completedAt DateTime?
+  color       String   @default("#10B981")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  tasks       Task[]
+}
+
+// Resources (Team Members)
+model Resource {
+  id          String   @id @default(uuid())
+  name        String
+  email       String   @unique
+  role        String
+  hourlyRate  Float    @default(0)
+  avatar      String?
+  department  String?
+  skills      String?  // JSON array of skills
+  availability Float   @default(100) // percentage available
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tasks       Task[]
+  allocations ResourceAllocation[]
+  timeEntries TimeEntry[]
+}
+
+// Resource Allocations
+model ResourceAllocation {
+  id          String   @id @default(uuid())
+  startDate   DateTime
+  endDate     DateTime
+  hoursPerDay Float    @default(8)
+  allocation  Float    @default(100) // percentage
+  
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  resourceId  String
+  resource    Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  
+  @@unique([projectId, resourceId])
+}
+
+// Budget Items
+model BudgetItem {
+  id          String   @id @default(uuid())
+  name        String
+  category    String   // labor, materials, equipment, software, travel, other
+  planned     Float
+  actual      Float    @default(0)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// Time Tracking
+model TimeEntry {
+  id          String   @id @default(uuid())
+  date        DateTime
+  hours       Float
+  description String?
+  billable    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  resourceId  String
+  resource    Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+}
+
+// Comments
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  author    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+// Tags
+model Tag {
+  id    String    @id @default(uuid())
+  name  String    @unique
+  color String    @default("#6B7280")
+  
+  tasks TaskTag[]
+}
+
+model TaskTag {
+  taskId String
+  tagId  String
+  
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  
+  @@id([taskId, tagId])
+}
+
+// Risk Management
+model Risk {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  probability String   @default("medium") // low, medium, high
+  impact      String   @default("medium") // low, medium, high
+  status      String   @default("open") // open, mitigating, resolved, closed
+  mitigation  String?
+  owner       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// Notes (Task-level)
+model Note {
+  id        String   @id @default(uuid())
+  title     String
+  content   String
+  author    String
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// ============================================
+// PROJECT ENHANCED FEATURES
+// ============================================
+
+// Project Notes with Action Items
+model ProjectNote {
+  id          String    @id @default(uuid())
+  content     String
+  isActionItem Boolean  @default(false)
+  actionDueDate DateTime?
+  actionStatus String?   // pending, in-progress, completed
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  authorId    String
+  author      User      @relation(fields: [authorId], references: [id])
+}
+
+// Project-Application junction (many-to-many)
+model ProjectApplication {
+  projectId     String
+  applicationId String
+  impactLevel   String?   // low, medium, high, critical
+  notes         String?
+  createdAt     DateTime  @default(now())
+
+  project       Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, applicationId])
+}
+
+// Project-Integration junction (many-to-many)
+model ProjectIntegration {
+  projectId     String
+  integrationId String
+  direction     String?   // inbound, outbound, bidirectional
+  notes         String?
+  createdAt     DateTime  @default(now())
+
+  project       Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, integrationId])
+}
+
+// Attachments
+model Attachment {
+  id          String   @id @default(uuid())
+  fileName    String
+  fileType    String
+  fileSize    Int
+  filePath    String
+  description String?
+  createdAt   DateTime @default(now())
+
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  uploadedById String
+  uploadedBy   User    @relation(fields: [uploadedById], references: [id])
+}
+
+// Chat Messages for Project Communication
+model ChatMessage {
+  id        String   @id @default(uuid())
+  content   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+
+  parentId  String?
+  parent    ChatMessage?  @relation("ChatReplies", fields: [parentId], references: [id])
+  replies   ChatMessage[] @relation("ChatReplies")
+}
+
+// Project Comments (for general discussion)
+model ProjectComment {
+  id        String   @id @default(uuid())
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projectId String
+
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+}
+
+// ============================================
+// EMAIL INTEGRATIONS
+// ============================================
+
+// Connected email accounts (OAuth tokens stored encrypted)
+model ConnectedEmailAccount {
+  id            String   @id @default(uuid())
+  provider      String   // 'outlook', 'gmail', 'yahoo', 'pst-import', etc.
+  email         String
+  displayName   String?
+  
+  // OAuth tokens (should be encrypted in production)
+  // Optional for import-based accounts (PST, CSV imports)
+  accessToken   String?
+  refreshToken  String?
+  tokenExpiry   DateTime?
+  
+  // Sync state
+  lastSyncAt    DateTime?
+  syncCursor    String?   // For delta sync (e.g., deltaLink for MS Graph)
+  isActive      Boolean   @default(true)
+  
+  // Metadata
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  syncedEmails  SyncedEmail[]
+  
+  @@unique([userId, email, provider])
+}
+
+// Synced emails from connected accounts
+model SyncedEmail {
+  id              String   @id @default(uuid())
+  externalId      String   // ID from the email provider (e.g., MS Graph message ID)
+  conversationId  String?
+  
+  subject         String
+  bodyPreview     String?
+  body            String?
+  
+  fromEmail       String
+  fromName        String?
+  toEmails        String   // JSON array
+  ccEmails        String?  // JSON array
+  
+  importance      String   @default("normal") // low, normal, high
+  hasAttachments  Boolean  @default(false)
+  attachments     String?  // JSON array of attachment metadata
+  
+  isRead          Boolean  @default(false)
+  receivedAt      DateTime
+  sentAt          DateTime?
+  
+  // Processing status
+  status          String   @default("unread") // unread, read, converted, archived, ignored
+  convertedToTicketId String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  accountId       String
+  account         ConnectedEmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@unique([accountId, externalId])
+  @@index([accountId, receivedAt])
+}
+
+// ============================================
+// TICKET / SUPPORT SYSTEM
+// ============================================
+
+model Ticket {
+  id          String    @id @default(uuid())
+  title       String
+  description String?
+  status      String    @default("open") // open, in-progress, resolved, closed, backlog
+  priority    String    @default("medium") // low, medium, high, critical
+  category    String    @default("general") // bug, feature, documentation, support, general
+  
+  // Assignment
+  assignedTo  String?
+  reportedBy  String
+  
+  // Dates
+  dueDate     DateTime?
+  resolvedAt  DateTime?
+  closedAt    DateTime?
+  
+  // Source tracking (for emails converted to tickets)
+  sourceType  String?   // email, import, manual
+  sourceId    String?   // ID of source email if applicable
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Creator relation
+  createdById String
+  
+  @@index([status, priority])
+  @@index([assignedTo])
+  @@index([createdById])
+}
