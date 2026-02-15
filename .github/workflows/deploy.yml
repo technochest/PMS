@@ -116,6 +116,8 @@ jobs:
             npm run build
             
             echo "==> Starting application..."
+            cd ${{ env.APP_DIR }}
+            pm2 delete tasksteer 2>/dev/null || true
             pm2 start ecosystem.config.js --env production
             pm2 save
             
@@ -128,9 +130,13 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sleep 10
-            curl -f http://localhost:3000 || exit 1
-            echo "Application is running successfully!"
+            sleep 15
+            echo "==> Checking PM2 status..."
+            pm2 list
+            echo "==> Testing health endpoint..."
+            curl -f http://localhost/health || exit 1
+            echo "==> Testing application..."
+            curl -sf http://localhost -o /dev/null && echo "Application is running successfully!" || exit 1
 
   notify:
     name: Notify on Failure
