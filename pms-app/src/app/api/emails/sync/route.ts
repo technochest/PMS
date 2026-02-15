@@ -162,8 +162,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Account not found" }, { status: 404 });
     }
 
+    // Ensure account has access token
+    if (!account.accessToken) {
+      return NextResponse.json(
+        { error: "Account has no access token. Please reconnect the account." },
+        { status: 401 }
+      );
+    }
+
     // Get valid access token
-    const accessToken = await getValidAccessToken(account);
+    const accessToken = await getValidAccessToken({
+      ...account,
+      accessToken: account.accessToken,
+    });
     if (!accessToken) {
       return NextResponse.json(
         { error: "Unable to get valid access token. Please reconnect the account." },
