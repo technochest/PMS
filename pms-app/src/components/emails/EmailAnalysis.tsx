@@ -606,27 +606,27 @@ export function EmailAnalysis() {
                   )}
 
                   {/* Suggested Existing Tickets */}
-                  {group.suggestedTickets && group.suggestedTickets.length > 0 && (
+                  {group.matchingTickets && group.matchingTickets.length > 0 && (
                     <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
                       <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Potentially Related Tickets:
                       </p>
                       <div className="space-y-2">
-                        {group.suggestedTickets.map((ticket) => (
+                        {group.matchingTickets.map((match) => (
                           <div
-                            key={ticket.id}
+                            key={match.ticket.id}
                             className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800"
                           >
                             <div>
                               <p className="font-medium text-gray-900 dark:text-white">
-                                {ticket.title}
+                                {match.ticket.title}
                               </p>
                               <p className="text-sm text-gray-600 dark:text-gray-400">
-                                {ticket.status} • {ticket.priority}
+                                {match.ticket.status} • {match.ticket.priority}
                               </p>
                             </div>
                             <button
-                              onClick={() => linkToExistingTicket(group, ticket.id)}
+                              onClick={() => linkToExistingTicket(group, match.ticket.id)}
                               className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
                             >
                               <Link2 className="w-4 h-4" />
