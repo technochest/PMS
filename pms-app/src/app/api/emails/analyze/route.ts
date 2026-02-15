@@ -45,12 +45,11 @@ export async function POST(request: NextRequest) {
     // Fetch ALL tickets (open and closed) for cross-reference
     let allTickets: {
       id: string;
-      ticketNumber: string;
       title: string;
       description: string | null;
       status: string;
       priority: string;
-      category: string | null;
+      category: string;
       createdAt: Date;
     }[] = [];
     try {
@@ -59,7 +58,6 @@ export async function POST(request: NextRequest) {
         take: 500,
         select: {
           id: true,
-          ticketNumber: true,
           title: true,
           description: true,
           status: true,
@@ -123,7 +121,6 @@ export async function POST(request: NextRequest) {
       try {
         const analyzed = analyzeTicket({
           id: ticket.id,
-          ticketNumber: ticket.ticketNumber,
           title: ticket.title,
           description: ticket.description,
           status: ticket.status,

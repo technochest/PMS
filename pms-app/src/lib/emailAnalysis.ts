@@ -31,7 +31,6 @@ export interface TicketEntities {
 // Analyzed ticket for comparison
 export interface AnalyzedTicket {
   id: string;
-  ticketNumber: string;
   title: string;
   description: string;
   status: string;
@@ -468,7 +467,6 @@ export function findPotentialDuplicates(
  */
 export function analyzeTicket(ticket: {
   id: string;
-  ticketNumber: string;
   title: string;
   description: string | null;
   status: string;
@@ -480,7 +478,6 @@ export function analyzeTicket(ticket: {
   
   return {
     id: ticket.id,
-    ticketNumber: ticket.ticketNumber,
     title: ticket.title,
     description: ticket.description || "",
     status: ticket.status,
@@ -642,11 +639,11 @@ export function crossAnalyzeEmailsAndTickets(
 
     if (duplicateMatches.length > 0) {
       recommendation = "skip";
-      recommendationReason = `Duplicate of ticket ${duplicateMatches[0].ticket.ticketNumber}`;
+      recommendationReason = `Duplicate of ticket #${duplicateMatches[0].ticket.id.slice(0, 8)}`;
       emailsWithDuplicates++;
     } else if (linkableMatches.length > 0) {
       recommendation = "link";
-      recommendationReason = `Related to ticket ${linkableMatches[0].ticket.ticketNumber}`;
+      recommendationReason = `Related to ticket #${linkableMatches[0].ticket.id.slice(0, 8)}`;
       emailsToLink++;
     } else {
       recommendation = "create";
