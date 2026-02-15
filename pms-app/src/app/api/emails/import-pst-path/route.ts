@@ -210,7 +210,6 @@ export async function POST(request: NextRequest) {
             subject: email.subject,
             bodyPreview: email.body.substring(0, 500),
             body: email.body,
-            bodyHtml: email.bodyHtml || null,
             fromEmail: email.from,
             fromName: email.fromName,
             toEmails: JSON.stringify(email.to),
