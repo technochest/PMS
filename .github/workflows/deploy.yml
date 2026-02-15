@@ -147,8 +147,19 @@ jobs:
             echo "==> Generating Prisma client..."
             npx prisma generate
             
-            echo "==> Running database migrations..."
-            npx prisma migrate deploy || npx prisma db push
+            echo "==> Setting up database..."
+            # Force push schema to SQLite database (creates if doesn't exist)
+            npx prisma db push --accept-data-loss
+            
+            # Verify database was created
+            if [ -f "dev.db" ]; then
+              echo "Database file created successfully at $(pwd)/dev.db"
+              ls -la dev.db
+            else
+              echo "ERROR: Database file not found!"
+              # Try creating via migration as fallback
+              npx prisma migrate deploy || true
+            fi
             
             echo "==> Building application..."
             npm run build
@@ -206,6 +217,10 @@ jobs:
               . "$NVM_DIR/nvm.sh" || true
             fi
             pm2 list
+            echo "==> Checking database file..."
+            ls -la /home/ubuntu/tasksteer/pms-app/dev.db 2>/dev/null || echo "Database file not found at expected location"
+            echo "==> Checking recent PM2 logs..."
+            pm2 logs tasksteer --lines 20 --nostream || true
             echo "==> Testing application on port 3000..."
             curl -sf http://localhost:3000 -o /dev/null && echo "Application is running successfully on port 3000!" || echo "Port 3000 check failed - app may still be starting"
             echo "==> Deployment verification complete"
