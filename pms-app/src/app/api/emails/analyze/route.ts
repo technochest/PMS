@@ -11,36 +11,83 @@ import {
   EmailGroup 
 } from "@/lib/emailAnalysis";
 
+// Type for emails passed from the client (from Zustand store)
+interface ClientEmail {
+  id: string;
+  subject: string;
+  body?: string;
+  bodyPreview?: string;
+  fromEmail: string;
+  fromName?: string | null;
+  toEmails: string; // JSON string array
+  ccEmails?: string; // JSON string array
+  receivedAt: Date | string;
+  sentAt?: Date | string;
+  status?: string;
+  isRead?: boolean;
+  importance?: string;
+  hasAttachments?: boolean;
+}
+
 export async function POST(request: NextRequest) {
-  console.log("[EMAIL-ANALYSIS] POST request received - v5 (with tickets)");
+  console.log("[EMAIL-ANALYSIS] POST request received - v6 (with client emails support)");
   try {
     const body = await request.json();
-    console.log("[EMAIL-ANALYSIS] Request body:", JSON.stringify(body));
-    const { emailIds } = body;
+    console.log("[EMAIL-ANALYSIS] Request body keys:", Object.keys(body));
+    const { emailIds, emails: clientEmails } = body;
 
-    // Build where clause - analyze all synced emails, optionally filtered by IDs
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const emailWhereClause: any = {};
-    if (emailIds && Array.isArray(emailIds) && emailIds.length > 0) {
-      emailWhereClause.id = { in: emailIds };
-    }
+    // Use client-provided emails if available, otherwise query database
+    let emailsToAnalyze: ClientEmail[] = [];
+    
+    if (clientEmails && Array.isArray(clientEmails) && clientEmails.length > 0) {
+      // Use emails from the client (Zustand store)
+      console.log("[EMAIL-ANALYSIS] Using", clientEmails.length, "emails from client");
+      emailsToAnalyze = clientEmails;
+    } else {
+      // Fall back to database query
+      console.log("[EMAIL-ANALYSIS] No client emails, querying database");
+      
+      // Build where clause - analyze all synced emails, optionally filtered by IDs
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const emailWhereClause: any = {};
+      if (emailIds && Array.isArray(emailIds) && emailIds.length > 0) {
+        emailWhereClause.id = { in: emailIds };
+      }
 
-    // Fetch emails
-    let syncedEmails;
-    try {
-      syncedEmails = await prisma.syncedEmail.findMany({
-        where: emailWhereClause,
-        orderBy: { receivedAt: "desc" },
-        take: 500,
-      });
-      console.log("[EMAIL-ANALYSIS] Found", syncedEmails.length, "emails to analyze");
-    } catch (dbError) {
-      console.error("[EMAIL-ANALYSIS] DB error finding emails:", dbError);
-      return NextResponse.json(
-        { error: "Database error", details: String(dbError) },
-        { status: 500 }
-      );
+      // Fetch emails from database
+      try {
+        const syncedEmails = await prisma.syncedEmail.findMany({
+          where: emailWhereClause,
+          orderBy: { receivedAt: "desc" },
+          take: 500,
+        });
+        console.log("[EMAIL-ANALYSIS] Found", syncedEmails.length, "emails in database");
+        emailsToAnalyze = syncedEmails.map(e => ({
+          id: e.id,
+          subject: e.subject,
+          body: e.body || undefined,
+          bodyPreview: e.bodyPreview || undefined,
+          fromEmail: e.fromEmail,
+          fromName: e.fromName,
+          toEmails: e.toEmails,
+          ccEmails: e.ccEmails || undefined,
+          receivedAt: e.receivedAt,
+          sentAt: e.sentAt || undefined,
+          status: e.status,
+          isRead: e.isRead,
+          importance: e.importance,
+          hasAttachments: e.hasAttachments,
+        }));
+      } catch (dbError) {
+        console.error("[EMAIL-ANALYSIS] DB error finding emails:", dbError);
+        return NextResponse.json(
+          { error: "Database error", details: String(dbError) },
+          { status: 500 }
+        );
+      }
     }
+    
+    console.log("[EMAIL-ANALYSIS] Total emails to analyze:", emailsToAnalyze.length);
 
     // Fetch ALL tickets (open and closed) for cross-reference
     let allTickets: {
@@ -72,7 +119,7 @@ export async function POST(request: NextRequest) {
       allTickets = [];
     }
 
-    if (syncedEmails.length === 0 && allTickets.length === 0) {
+    if (emailsToAnalyze.length === 0 && allTickets.length === 0) {
       return NextResponse.json({
         success: true,
         message: "No emails or tickets to analyze.",
@@ -92,7 +139,7 @@ export async function POST(request: NextRequest) {
 
     // Analyze each email
     const analyzedEmails: AnalyzedEmail[] = [];
-    for (const email of syncedEmails) {
+    for (const email of emailsToAnalyze) {
       try {
         let toArray: string[] = [];
         try {

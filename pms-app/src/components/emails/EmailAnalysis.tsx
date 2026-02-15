@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   Brain,
   Mail,
@@ -21,6 +21,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useAdminStore } from "@/lib/adminStore";
+import { useEmailStore } from "@/lib/emailStore";
 import { cn } from "@/lib/utils";
 
 interface EmailEntity {
@@ -120,6 +121,7 @@ const sentimentIcons = {
 
 export function EmailAnalysis() {
   const { currentUser } = useAdminStore();
+  const { emails, initializeSampleData } = useEmailStore();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -134,15 +136,41 @@ export function EmailAnalysis() {
     category: "general",
   });
 
+  // Initialize sample data on mount if not already done
+  useEffect(() => {
+    initializeSampleData();
+  }, [initializeSampleData]);
+
   const analyzeEmails = useCallback(async () => {
     setIsAnalyzing(true);
     setError(null);
 
     try {
+      // Transform store emails to format expected by the API
+      const emailsForAnalysis = emails.map(email => ({
+        id: email.id,
+        subject: email.subject,
+        body: email.body,
+        bodyPreview: email.bodyPreview,
+        fromEmail: email.from,
+        fromName: email.fromName || null,
+        toEmails: JSON.stringify(email.to),
+        ccEmails: JSON.stringify(email.cc || []),
+        receivedAt: email.receivedAt,
+        sentAt: email.sentAt || email.receivedAt,
+        status: email.status,
+        isRead: email.isRead,
+        importance: email.importance || "normal",
+        hasAttachments: email.hasAttachments || false,
+      }));
+
       const response = await fetch("/api/emails/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: currentUser?.id }), // Optional - for ticket suggestions
+        body: JSON.stringify({ 
+          userId: currentUser?.id,
+          emails: emailsForAnalysis, // Pass emails from store
+        }),
       });
 
       const data = await response.json();
@@ -157,7 +185,7 @@ export function EmailAnalysis() {
     } finally {
       setIsAnalyzing(false);
     }
-  }, [currentUser]);
+  }, [currentUser, emails]);
 
   const toggleGroup = (groupId: string) => {
     const newExpanded = new Set(expandedGroups);
