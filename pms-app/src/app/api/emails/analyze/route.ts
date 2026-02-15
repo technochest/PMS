@@ -43,7 +43,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch ALL tickets (open and closed) for cross-reference
-    let allTickets;
+    let allTickets: {
+      id: string;
+      ticketNumber: string;
+      title: string;
+      description: string | null;
+      status: string;
+      priority: string;
+      category: string | null;
+      createdAt: Date;
+    }[] = [];
     try {
       allTickets = await prisma.ticket.findMany({
         orderBy: { createdAt: "desc" },
