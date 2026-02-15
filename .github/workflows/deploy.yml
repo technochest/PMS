@@ -1,0 +1,147 @@
+name: Deploy TaskSteer to AWS EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  APP_NAME: tasksteer
+  APP_DIR: /home/ubuntu/tasksteer
+  NODE_VERSION: '20'
+
+jobs:
+  build:
+    name: Build Application
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: pms-app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: pms-app
+        run: npm ci
+
+      - name: Generate Prisma Client
+        working-directory: pms-app
+        run: npx prisma generate
+
+      - name: Build Next.js application
+        working-directory: pms-app
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Create deployment artifact
+        run: |
+          tar -czf artifact.tar.gz \
+            --exclude='pms-app/node_modules' \
+            --exclude='pms-app/.next/cache' \
+            pms-app/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifact
+          path: artifact.tar.gz
+          retention-days: 1
+
+  deploy:
+    name: Deploy to EC2
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -e
+            
+            echo "==> Stopping application..."
+            pm2 stop ${{ env.APP_NAME }} || true
+            
+            echo "==> Navigating to app directory..."
+            cd ${{ env.APP_DIR }}
+            
+            echo "==> Pulling latest changes..."
+            git fetch origin main
+            git reset --hard origin/main
+            
+            echo "==> Installing dependencies..."
+            cd pms-app
+            npm ci --production=false
+            
+            echo "==> Generating Prisma client..."
+            npx prisma generate
+            
+            echo "==> Running database migrations..."
+            npx prisma migrate deploy || npx prisma db push
+            
+            echo "==> Building application..."
+            npm run build
+            
+            echo "==> Starting application..."
+            pm2 start ecosystem.config.js --env production
+            pm2 save
+            
+            echo "==> Deployment complete!"
+
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            sleep 10
+            curl -f http://localhost:3000 || exit 1
+            echo "Application is running successfully!"
+
+  notify:
+    name: Notify on Failure
+    needs: [build, deploy]
+    runs-on: ubuntu-latest
+    if: failure()
+    
+    steps:
+      - name: Deployment failed notification
+        run: |
+          echo "Deployment failed!"
+          echo "Repository: ${{ github.repository }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"

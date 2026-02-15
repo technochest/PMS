@@ -1,0 +1,20 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "ComprehendAccess",
+            "Effect": "Allow",
+            "Action": [
+                "comprehend:DetectEntities",
+                "comprehend:DetectKeyPhrases",
+                "comprehend:DetectSentiment",
+                "comprehend:DetectSyntax",
+                "comprehend:DetectDominantLanguage",
+                "comprehend:BatchDetectEntities",
+                "comprehend:BatchDetectKeyPhrases",
+                "comprehend:BatchDetectSentiment"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
