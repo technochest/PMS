@@ -488,7 +488,7 @@ export function analyzeTicket(ticket: {
       keywords: extractKeywords(fullText),
       productMentions: extractProductMentions(fullText),
       referenceNumbers: extractReferences(fullText),
-      issueType: detectIssueType(fullText),
+      issueType: detectIssueType(fullText, ticket.title),
       category: ticket.category,
     },
   };
