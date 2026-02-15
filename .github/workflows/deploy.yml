@@ -84,32 +84,36 @@ jobs:
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          APP_NAME: tasksteer
-          APP_DIR: /home/ubuntu/tasksteer
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: APP_NAME,APP_DIR
           script_stop: true
           command_timeout: 30m
           script: |
-            set -e
+            # Define variables directly in script
+            APP_DIR="/home/ubuntu/tasksteer"
             
             echo "==> Setting up environment..."
+            
+            # Source NVM if it exists (ignore errors)
             export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            if [ -s "$NVM_DIR/nvm.sh" ]; then
+              . "$NVM_DIR/nvm.sh" || true
+            fi
             
             # Install Node.js if not present
-            if ! command -v node &> /dev/null; then
+            if ! command -v node > /dev/null 2>&1; then
               echo "==> Installing Node.js..."
               curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
               sudo apt-get install -y nodejs
             fi
             
+            echo "Node version: $(node --version)"
+            echo "NPM version: $(npm --version)"
+            
             # Install PM2 if not present
-            if ! command -v pm2 &> /dev/null; then
+            if ! command -v pm2 > /dev/null 2>&1; then
               echo "==> Installing PM2..."
               sudo npm install -g pm2
             fi
@@ -169,8 +173,11 @@ jobs:
           script: |
             sleep 15
             echo "==> Checking PM2 status..."
+            # Source NVM if it exists
             export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            if [ -s "$NVM_DIR/nvm.sh" ]; then
+              . "$NVM_DIR/nvm.sh" || true
+            fi
             pm2 list
             echo "==> Testing application on port 3000..."
             curl -sf http://localhost:3000 -o /dev/null && echo "Application is running successfully on port 3000!" || echo "Port 3000 check failed - app may still be starting"
