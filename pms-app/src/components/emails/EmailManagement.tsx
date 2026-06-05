@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useAdminStore } from "@/lib/adminStore";
 import { useEmailStore } from "@/lib/emailStore";
-import { useTicketStore } from "@/lib/ticketStore";
 import {
   Email,
   EmailStatus,
@@ -55,6 +55,7 @@ const priorityColors: Record<Priority, string> = {
 };
 
 export function EmailManagement() {
+  const { currentUser } = useAdminStore();
   const {
     emails,
     selectedEmailId,
@@ -76,8 +77,6 @@ export function EmailManagement() {
     initializeSampleData,
   } = useEmailStore();
 
-  const { addTicket } = useTicketStore();
-
   const [activeView, setActiveView] = useState<ViewType>("inbox");
   const [activeTab, setActiveTab] = useState<TabType>("all");
   const [searchTerm, setSearchTerm] = useState("");
@@ -85,6 +84,8 @@ export function EmailManagement() {
   const [convertingEmail, setConvertingEmail] = useState<Email | null>(null);
   const [ticketFormData, setTicketFormData] = useState<CreateTicketInput | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isCreatingTicket, setIsCreatingTicket] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   // Initialize sample data on mount
   useEffect(() => {
@@ -140,19 +141,52 @@ export function EmailManagement() {
     setShowConvertModal(true);
   };
 
-  const handleCreateTicket = () => {
+  const handleCreateTicket = async () => {
     if (!ticketFormData || !convertingEmail) return;
+    if (!currentUser?.id) {
+      setApiError("You must be signed in to create tickets.");
+      return;
+    }
 
-    // Create the ticket
-    const ticket = addTicket(ticketFormData);
+    try {
+      setIsCreatingTicket(true);
+      setApiError(null);
 
-    // Mark email as converted
-    markAsConverted(convertingEmail.id, ticket.id, ticket.ticketNumber);
+      const response = await fetch("/api/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: ticketFormData.title,
+          description: ticketFormData.summary || "",
+          priority: ticketFormData.priority || "medium",
+          status: "open",
+          category: ticketFormData.category || "general",
+          assignedTo: ticketFormData.assignedToId || null,
+          reportedBy: ticketFormData.requestorName || ticketFormData.requestorEmail || convertingEmail.from,
+          dueDate: ticketFormData.expectedEndDate
+            ? new Date(ticketFormData.expectedEndDate).toISOString()
+            : null,
+          sourceType: "email",
+          sourceId: convertingEmail.id,
+          createdById: currentUser.id,
+        }),
+      });
 
-    // Close modal
-    setShowConvertModal(false);
-    setConvertingEmail(null);
-    setTicketFormData(null);
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.error || "Failed to create ticket");
+      }
+
+      markAsConverted(convertingEmail.id, payload.ticket.id, payload.ticket.ticketNumber);
+
+      setShowConvertModal(false);
+      setConvertingEmail(null);
+      setTicketFormData(null);
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : "Failed to create ticket");
+    } finally {
+      setIsCreatingTicket(false);
+    }
   };
 
   return (
@@ -583,6 +617,12 @@ export function EmailManagement() {
 
             <div className="p-6 overflow-y-auto max-h-[60vh]">
               <div className="space-y-4">
+                {apiError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {apiError}
+                  </div>
+                )}
+
                 {/* Title */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -756,10 +796,25 @@ export function EmailManagement() {
               </button>
               <button
                 onClick={handleCreateTicket}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                disabled={isCreatingTicket}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-lg transition-colors",
+                  isCreatingTicket
+                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    : "bg-blue-600 text-white hover:bg-blue-700"
+                )}
               >
-                <Ticket className="w-4 h-4" />
-                Create Ticket
+                {isCreatingTicket ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Ticket className="w-4 h-4" />
+                    Create Ticket
+                  </>
+                )}
               </button>
             </div>
           </div>
