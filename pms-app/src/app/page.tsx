@@ -20,6 +20,79 @@ import { Task, TaskStatus } from "@/lib/types";
 // View types for navigation
 export type AppView = "home" | "emails" | "tickets" | "myProjects" | "myWorkflows" | "users" | "settings" | "marketplace" | "imports";
 
+const chartTraderQaTasks = [
+  {
+    name: "CTP-001 Planner should allow chart placement and deploy-only submit flow",
+    description:
+      "Implemented planner placement with Ctrl+Left Click and kept Deploy as submit action. Test: Enable Planner, Ctrl+Left Click sets Entry/Stop/Target lines, drag lines, click Deploy to submit.",
+    status: "todo",
+    priority: "high",
+  },
+  {
+    name: "CTP-002 Planner entry constraints by trade direction",
+    description:
+      "Added directional guard: Long entry must be <= current price; Short entry must be >= current price. Test: Long bias above market rejects/below accepts, inverse for Short.",
+    status: "todo",
+    priority: "high",
+  },
+  {
+    name: "CTP-003 Planner should not force Stop Limit",
+    description:
+      "Deploy path changed to use Limit entry at planned price. Test: verify Deploy sends Limit order at planned price when planner entry is away from market.",
+    status: "todo",
+    priority: "high",
+  },
+  {
+    name: "CTP-004 ATM chart-click and one-click orders no Initialize Pending",
+    description:
+      "ATM entry flow changed to submit entry first then call StartAtmStrategy. Test: Buy/Sell via chart click and one-click with ATM template and verify no Initialize Pending stall.",
+    status: "todo",
+    priority: "high",
+  },
+  {
+    name: "CTP-005 Apply ATM with empty manual stop and target",
+    description:
+      "Added fallback to ATM-derived default stop/target distances when manual fields are empty. Test: open position, ATM selected, empty manual fields, click Apply ATM.",
+    status: "todo",
+    priority: "high",
+  },
+  {
+    name: "CTP-006 Remaining OCO leg cancels when position closes",
+    description:
+      "Repaired OCO monitor and added protective-order cancellation when flat. Test: open with stop+target, close manually, verify remaining leg cancels.",
+    status: "todo",
+    priority: "high",
+  },
+  {
+    name: "CTP-007 Risk and reward zones update immediately after fill",
+    description:
+      "Added throttled OnMarketData refresh so zones update immediately after fills. Test: fill position and verify zones appear without waiting for bar close.",
+    status: "todo",
+    priority: "medium",
+  },
+  {
+    name: "CTP-008 Stocks exit pricing for Price and Currency",
+    description:
+      "Cleaned exit-price conversion: Price uses absolute values, Currency converts from position average using point value. Test both stock scenarios.",
+    status: "todo",
+    priority: "high",
+  },
+  {
+    name: "CTP-009 Release packaging rebuild and output validation",
+    description:
+      "Ran full release pipeline and validated Basic/Essential/Professional final ZIP outputs. Test package timestamps and NinjaTrader import with latest ZIP.",
+    status: "done",
+    priority: "medium",
+  },
+  {
+    name: "CTP-010 Apply ATM for ATM and non-ATM workflows",
+    description:
+      "Restored fallback behavior so Apply ATM attempts template attach then creates non-ATM protective orders when needed. Test ATM success, ATM fail fallback, and no-template with manual values.",
+    status: "todo",
+    priority: "high",
+  },
+];
+
 // Demo data for initial experience
 const createDemoData = (addProject: any, addTask: any, addMilestone: any, addResource: any, addBudgetItem: any) => {
   // Add demo project
@@ -392,12 +465,103 @@ export default function Home() {
       },
     ];
 
-    await Promise.all(
+    const milestoneResponses = await Promise.all(
       milestonesToCreate.map((milestone) =>
         fetch("/api/milestones", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...milestone, projectId }),
+        })
+      )
+    );
+
+    const createdMilestones = await Promise.all(
+      milestoneResponses.map(async (response) => {
+        if (!response.ok) {
+          throw new Error("Failed to create milestone during project seed");
+        }
+        const payload = await response.json();
+        return payload.milestone;
+      })
+    );
+
+    const qaMilestone =
+      createdMilestones.find((milestone: any) => milestone.name.includes("Milestone 3")) ||
+      createdMilestones[2];
+
+    if (qaMilestone?.id) {
+      await Promise.all(
+        chartTraderQaTasks.map((task) =>
+          fetch("/api/tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...task,
+              progress: task.status === "done" ? 100 : 0,
+              estimatedHours: 2,
+              projectId,
+              milestoneId: qaMilestone.id,
+              startDate: new Date().toISOString(),
+              endDate: new Date(qaMilestone.dueDate).toISOString(),
+            }),
+          })
+        )
+      );
+    }
+
+    await hydrateFromDatabase();
+  }, [hydrateFromDatabase]);
+
+  const ensureChartTraderQaTasks = useCallback(async () => {
+    const state = useProjectStore.getState();
+    const chartTraderProject = state.projects.find((project) => project.name === "ChartTrader Launch");
+
+    if (!chartTraderProject) {
+      return;
+    }
+
+    const qaMilestone = state.milestones.find(
+      (milestone) =>
+        milestone.projectId === chartTraderProject.id &&
+        milestone.name.includes("Milestone 3")
+    );
+
+    if (!qaMilestone) {
+      return;
+    }
+
+    const existingTaskNames = new Set(
+      state.tasks
+        .filter(
+          (task) =>
+            task.projectId === chartTraderProject.id &&
+            task.milestoneId === qaMilestone.id
+        )
+        .map((task) => task.name)
+    );
+
+    const tasksToCreate = chartTraderQaTasks.filter(
+      (task) => !existingTaskNames.has(task.name)
+    );
+
+    if (tasksToCreate.length === 0) {
+      return;
+    }
+
+    await Promise.all(
+      tasksToCreate.map((task) =>
+        fetch("/api/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...task,
+            progress: task.status === "done" ? 100 : 0,
+            estimatedHours: 2,
+            projectId: chartTraderProject.id,
+            milestoneId: qaMilestone.id,
+            startDate: new Date().toISOString(),
+            endDate: new Date(qaMilestone.dueDate).toISOString(),
+          }),
         })
       )
     );
@@ -737,6 +901,7 @@ export default function Home() {
         if (useProjectStore.getState().projects.length === 0) {
           await seedChartTraderProject();
         }
+        await ensureChartTraderQaTasks();
       } catch (error) {
         console.error("Project initialization error:", error);
       } finally {
@@ -745,7 +910,7 @@ export default function Home() {
     };
 
     run();
-  }, [hydrateFromDatabase, isAuthenticated, isInitialized, seedChartTraderProject]);
+  }, [ensureChartTraderQaTasks, hydrateFromDatabase, isAuthenticated, isInitialized, seedChartTraderProject]);
 
   // Show login if not authenticated
   if (!isAuthenticated) {

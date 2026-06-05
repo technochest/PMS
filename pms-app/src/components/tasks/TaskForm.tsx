@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Task, TaskStatus, Priority, CreateTaskInput } from "@/lib/types";
+import { Task, TaskStatus, Priority, CreateTaskInput, Milestone } from "@/lib/types";
 import {
   Button,
   Input,
@@ -39,6 +39,7 @@ interface TaskFormProps {
   onClose: () => void;
   onSubmit: (data: CreateTaskInput) => void;
   projectId: string;
+  milestones: Milestone[];
   initialStatus?: TaskStatus;
   existingTask?: Task;
 }
@@ -62,6 +63,7 @@ export function TaskForm({
   onClose,
   onSubmit,
   projectId,
+  milestones,
   initialStatus = "todo",
   existingTask,
 }: TaskFormProps) {
@@ -70,6 +72,7 @@ export function TaskForm({
     description: existingTask?.description || "",
     status: existingTask?.status || initialStatus,
     priority: existingTask?.priority || "medium",
+    milestoneId: existingTask?.milestoneId || "",
     startDate: existingTask
       ? new Date(existingTask.startDate).toISOString().split("T")[0]
       : new Date().toISOString().split("T")[0],
@@ -101,6 +104,9 @@ export function TaskForm({
     if (!formData.name.trim()) {
       newErrors.name = "Task name is required";
     }
+    if (!formData.milestoneId) {
+      newErrors.milestoneId = "Milestone is required";
+    }
     if (!formData.startDate) {
       newErrors.startDate = "Start date is required";
     }
@@ -129,6 +135,7 @@ export function TaskForm({
       description: formData.description || undefined,
       status: formData.status as TaskStatus,
       priority: formData.priority as Priority,
+      milestoneId: formData.milestoneId,
       startDate: new Date(formData.startDate),
       endDate: new Date(formData.endDate),
       estimatedHours: formData.estimatedHours
@@ -185,6 +192,25 @@ export function TaskForm({
           />
         </div>
 
+        <Select
+          label="Milestone"
+          name="milestoneId"
+          value={formData.milestoneId}
+          onChange={handleChange}
+          error={errors.milestoneId}
+          options={milestones.map((milestone) => ({
+            value: milestone.id,
+            label: milestone.name,
+          }))}
+          required
+        />
+
+        {milestones.length === 0 && (
+          <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+            Create a milestone before adding tasks. Every task must be linked to a milestone.
+          </p>
+        )}
+
         <div className="grid grid-cols-2 gap-4">
           <Input
             label="Start Date"
@@ -222,7 +248,7 @@ export function TaskForm({
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit">
+          <Button type="submit" disabled={milestones.length === 0}>
             {existingTask ? "Update Task" : "Create Task"}
           </Button>
         </div>

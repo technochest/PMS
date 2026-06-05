@@ -10,13 +10,31 @@ function parseDate(value: unknown): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+async function syncMilestoneCompletion(milestoneId: string) {
+  const milestoneTasks = await prisma.task.findMany({
+    where: { milestoneId },
+    select: { status: true },
+  });
+
+  const completed =
+    milestoneTasks.length > 0 && milestoneTasks.every((task) => task.status === "done");
+
+  await prisma.milestone.update({
+    where: { id: milestoneId },
+    data: {
+      completed,
+      completedAt: completed ? new Date() : null,
+    },
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    if (!body?.projectId || !body?.name) {
+    if (!body?.projectId || !body?.name || !body?.milestoneId) {
       return NextResponse.json(
-        { error: "projectId and name are required" },
+        { error: "projectId, name, and milestoneId are required" },
         { status: 400 }
       );
     }
@@ -28,6 +46,18 @@ export async function POST(request: NextRequest) {
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+
+    const milestone = await prisma.milestone.findUnique({
+      where: { id: body.milestoneId },
+      select: { id: true, projectId: true },
+    });
+
+    if (!milestone || milestone.projectId !== body.projectId) {
+      return NextResponse.json(
+        { error: "milestoneId must belong to the project" },
+        { status: 400 }
+      );
     }
 
     const lastTask = await prisma.task.findFirst({
@@ -54,10 +84,12 @@ export async function POST(request: NextRequest) {
             : (lastTask?.order ?? -1) + 1,
         projectId: body.projectId,
         parentId: body.parentId || null,
-        milestoneId: body.milestoneId || null,
+        milestoneId: body.milestoneId,
         assigneeId: body.assigneeId || null,
       },
     });
+
+    await syncMilestoneCompletion(body.milestoneId);
 
     return NextResponse.json({ success: true, task }, { status: 201 });
   } catch (error) {

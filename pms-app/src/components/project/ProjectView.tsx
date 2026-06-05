@@ -272,6 +272,7 @@ export function ProjectView({
         onClose={() => setIsTaskFormOpen(false)}
         onSubmit={onAddTask}
         projectId={project.id}
+        milestones={milestones}
         initialStatus={taskFormStatus}
       />
 
