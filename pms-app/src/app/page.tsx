@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useProjectStore } from "@/lib/store";
 import { useAdminStore } from "@/lib/adminStore";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -233,29 +233,492 @@ export default function Home() {
     budgetItems,
     selectedProjectId,
     selectProject,
-    addProject,
-    updateProject,
-    deleteProject,
-    addTask,
-    updateTask,
-    deleteTask,
-    moveTask,
-    addMilestone,
-    updateMilestone,
-    deleteMilestone,
-    completeMilestone,
-    addResource,
-    updateResource,
-    deleteResource,
-    addBudgetItem,
-    updateBudgetItem,
-    deleteBudgetItem,
+    setProjects,
+    setTasks,
+    setMilestones,
+    setResources,
+    setBudgetItems,
+    addProject: addProjectLocal,
+    updateProject: updateProjectLocal,
+    deleteProject: deleteProjectLocal,
+    addTask: addTaskLocal,
+    updateTask: updateTaskLocal,
+    deleteTask: deleteTaskLocal,
+    moveTask: moveTaskLocal,
+    addMilestone: addMilestoneLocal,
+    updateMilestone: updateMilestoneLocal,
+    deleteMilestone: deleteMilestoneLocal,
+    completeMilestone: completeMilestoneLocal,
+    addResource: addResourceLocal,
+    updateResource: updateResourceLocal,
+    deleteResource: deleteResourceLocal,
+    addBudgetItem: addBudgetItemLocal,
+    updateBudgetItem: updateBudgetItemLocal,
+    deleteBudgetItem: deleteBudgetItemLocal,
   } = useProjectStore();
 
   const { isAuthenticated, currentUser, logout, initializeDefaults } = useAdminStore();
 
   const [isInitialized, setIsInitialized] = useState(false);
   const [currentView, setCurrentView] = useState<AppView>("home");
+
+  const hydrateFromDatabase = useCallback(async () => {
+    const [projectsResponse, resourcesResponse] = await Promise.all([
+      fetch("/api/projects"),
+      fetch("/api/resources"),
+    ]);
+
+    if (!projectsResponse.ok) {
+      throw new Error("Failed to load projects");
+    }
+
+    const projectsPayload = await projectsResponse.json();
+    const dbProjects = Array.isArray(projectsPayload?.projects)
+      ? projectsPayload.projects
+      : [];
+
+    const mappedProjects = dbProjects.map((project: any) => ({
+      ...project,
+      startDate: new Date(project.startDate),
+      endDate: new Date(project.endDate),
+      businessRequirementDate: project.businessRequirementDate
+        ? new Date(project.businessRequirementDate)
+        : null,
+      createdAt: new Date(project.createdAt),
+      updatedAt: new Date(project.updatedAt),
+    }));
+
+    const mappedTasks = dbProjects.flatMap((project: any) =>
+      (project.tasks || []).map((task: any) => ({
+        ...task,
+        startDate: new Date(task.startDate),
+        endDate: new Date(task.endDate),
+        createdAt: new Date(task.createdAt),
+        updatedAt: new Date(task.updatedAt),
+      }))
+    );
+
+    const mappedMilestones = dbProjects.flatMap((project: any) =>
+      (project.milestones || []).map((milestone: any) => ({
+        ...milestone,
+        dueDate: new Date(milestone.dueDate),
+        completedAt: milestone.completedAt ? new Date(milestone.completedAt) : null,
+        createdAt: new Date(milestone.createdAt),
+        updatedAt: new Date(milestone.updatedAt),
+      }))
+    );
+
+    const mappedBudgetItems = dbProjects.flatMap((project: any) =>
+      (project.budgetItems || []).map((item: any) => ({
+        ...item,
+        createdAt: new Date(item.createdAt),
+        updatedAt: new Date(item.updatedAt),
+      }))
+    );
+
+    let mappedResources: any[] = [];
+    if (resourcesResponse.ok) {
+      const resourcesPayload = await resourcesResponse.json();
+      mappedResources = Array.isArray(resourcesPayload?.resources)
+        ? resourcesPayload.resources.map((resource: any) => ({
+            ...resource,
+            createdAt: new Date(resource.createdAt),
+            updatedAt: new Date(resource.updatedAt),
+          }))
+        : [];
+    }
+
+    setProjects(mappedProjects);
+    setTasks(mappedTasks);
+    setMilestones(mappedMilestones);
+    setBudgetItems(mappedBudgetItems);
+    setResources(mappedResources);
+
+    if (mappedProjects.length > 0) {
+      selectProject(mappedProjects[0].id);
+    } else {
+      selectProject(null);
+    }
+  }, [selectProject, setBudgetItems, setMilestones, setProjects, setResources, setTasks]);
+
+  const seedChartTraderProject = useCallback(async () => {
+    const createProjectResponse = await fetch("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "ChartTrader Launch",
+        description:
+          "Plan, test, and launch ChartTrader on the website with clear test and launch milestones.",
+        status: "active",
+        priority: "high",
+        startDate: new Date().toISOString(),
+        endDate: new Date(Date.now() + 75 * 24 * 60 * 60 * 1000).toISOString(),
+        budget: 35000,
+        color: "#0EA5E9",
+      }),
+    });
+
+    if (!createProjectResponse.ok) {
+      throw new Error("Failed to create ChartTrader launch project");
+    }
+
+    const { project } = await createProjectResponse.json();
+    const projectId = project.id;
+
+    const milestonesToCreate = [
+      {
+        name: "Milestone 1: Launch plan approved",
+        description: "Scope, owners, launch date target, and success criteria are confirmed.",
+        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        color: "#10B981",
+      },
+      {
+        name: "Milestone 2: Website content and purchase flow ready",
+        description: "Product page, media assets, checkout, and license delivery flow are validated.",
+        dueDate: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000).toISOString(),
+        color: "#3B82F6",
+      },
+      {
+        name: "Milestone 3: QA sign-off",
+        description: "Testing complete with blockers resolved and launch recommendation documented.",
+        dueDate: new Date(Date.now() + 50 * 24 * 60 * 60 * 1000).toISOString(),
+        color: "#8B5CF6",
+      },
+      {
+        name: "Milestone 4: Production launch",
+        description: "ChartTrader is live on the website with monitoring and support coverage in place.",
+        dueDate: new Date(Date.now() + 75 * 24 * 60 * 60 * 1000).toISOString(),
+        color: "#F59E0B",
+      },
+    ];
+
+    await Promise.all(
+      milestonesToCreate.map((milestone) =>
+        fetch("/api/milestones", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...milestone, projectId }),
+        })
+      )
+    );
+
+    await hydrateFromDatabase();
+  }, [hydrateFromDatabase]);
+
+  const createProject = useCallback(
+    async (input: any) => {
+      const response = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...input,
+          startDate: input.startDate ? new Date(input.startDate).toISOString() : undefined,
+          endDate: input.endDate ? new Date(input.endDate).toISOString() : undefined,
+          businessRequirementDate: input.businessRequirementDate
+            ? new Date(input.businessRequirementDate).toISOString()
+            : undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const payload = await response.json();
+      const project = payload.project;
+      selectProject(project.id);
+      await hydrateFromDatabase();
+    },
+    [hydrateFromDatabase, selectProject]
+  );
+
+  const handleUpdateProject = useCallback(
+    async (id: string, updates: any) => {
+      const response = await fetch(`/api/projects/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...updates,
+          startDate: updates.startDate
+            ? new Date(updates.startDate).toISOString()
+            : undefined,
+          endDate: updates.endDate ? new Date(updates.endDate).toISOString() : undefined,
+          businessRequirementDate: updates.businessRequirementDate
+            ? new Date(updates.businessRequirementDate).toISOString()
+            : undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      updateProjectLocal(id, updates);
+      await hydrateFromDatabase();
+    },
+    [hydrateFromDatabase, updateProjectLocal]
+  );
+
+  const handleDeleteProject = useCallback(
+    async (id: string) => {
+      const response = await fetch(`/api/projects/${id}`, { method: "DELETE" });
+
+      if (!response.ok) {
+        return;
+      }
+
+      deleteProjectLocal(id);
+      await hydrateFromDatabase();
+    },
+    [deleteProjectLocal, hydrateFromDatabase]
+  );
+
+  const handleAddTask = useCallback(
+    async (input: any) => {
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...input,
+          startDate: new Date(input.startDate).toISOString(),
+          endDate: new Date(input.endDate).toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      await hydrateFromDatabase();
+    },
+    [hydrateFromDatabase]
+  );
+
+  const handleUpdateTask = useCallback(
+    async (id: string, updates: any) => {
+      const response = await fetch(`/api/tasks/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...updates,
+          startDate: updates.startDate
+            ? new Date(updates.startDate).toISOString()
+            : undefined,
+          endDate: updates.endDate ? new Date(updates.endDate).toISOString() : undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      updateTaskLocal(id, updates);
+      await hydrateFromDatabase();
+    },
+    [hydrateFromDatabase, updateTaskLocal]
+  );
+
+  const handleDeleteTask = useCallback(
+    async (id: string) => {
+      const response = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+
+      if (!response.ok) {
+        return;
+      }
+
+      deleteTaskLocal(id);
+      await hydrateFromDatabase();
+    },
+    [deleteTaskLocal, hydrateFromDatabase]
+  );
+
+  const handleMoveTask = useCallback(
+    async (taskId: string, newStatus: TaskStatus) => {
+      await handleUpdateTask(taskId, {
+        status: newStatus,
+        progress: newStatus === "done" ? 100 : newStatus === "in-progress" ? 50 : 0,
+      });
+    },
+    [handleUpdateTask]
+  );
+
+  const handleAddMilestone = useCallback(
+    async (input: any) => {
+      const response = await fetch("/api/milestones", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...input,
+          dueDate: new Date(input.dueDate).toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      await hydrateFromDatabase();
+    },
+    [hydrateFromDatabase]
+  );
+
+  const handleUpdateMilestone = useCallback(
+    async (id: string, updates: any) => {
+      const response = await fetch(`/api/milestones/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...updates,
+          dueDate: updates.dueDate ? new Date(updates.dueDate).toISOString() : undefined,
+          completedAt: updates.completedAt
+            ? new Date(updates.completedAt).toISOString()
+            : undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      updateMilestoneLocal(id, updates);
+      await hydrateFromDatabase();
+    },
+    [hydrateFromDatabase, updateMilestoneLocal]
+  );
+
+  const handleDeleteMilestone = useCallback(
+    async (id: string) => {
+      const response = await fetch(`/api/milestones/${id}`, { method: "DELETE" });
+
+      if (!response.ok) {
+        return;
+      }
+
+      deleteMilestoneLocal(id);
+      await hydrateFromDatabase();
+    },
+    [deleteMilestoneLocal, hydrateFromDatabase]
+  );
+
+  const handleCompleteMilestone = useCallback(
+    async (id: string) => {
+      await handleUpdateMilestone(id, {
+        completed: true,
+        completedAt: new Date(),
+      });
+    },
+    [handleUpdateMilestone]
+  );
+
+  const handleAddResource = useCallback(
+    async (input: any) => {
+      const response = await fetch("/api/resources", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...input,
+          skills: input.skills ? JSON.stringify(input.skills) : null,
+        }),
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      await hydrateFromDatabase();
+    },
+    [hydrateFromDatabase]
+  );
+
+  const handleUpdateResource = useCallback(
+    async (id: string, updates: any) => {
+      const response = await fetch(`/api/resources/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...updates,
+          skills: Array.isArray(updates.skills)
+            ? JSON.stringify(updates.skills)
+            : updates.skills,
+        }),
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      updateResourceLocal(id, updates);
+      await hydrateFromDatabase();
+    },
+    [hydrateFromDatabase, updateResourceLocal]
+  );
+
+  const handleDeleteResource = useCallback(
+    async (id: string) => {
+      const response = await fetch(`/api/resources/${id}`, { method: "DELETE" });
+
+      if (!response.ok) {
+        return;
+      }
+
+      deleteResourceLocal(id);
+      await hydrateFromDatabase();
+    },
+    [deleteResourceLocal, hydrateFromDatabase]
+  );
+
+  const handleAddBudgetItem = useCallback(
+    async (projectId: string, input: any) => {
+      const response = await fetch("/api/budget-items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...input,
+          projectId,
+        }),
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      addBudgetItemLocal(projectId, input);
+      await hydrateFromDatabase();
+    },
+    [addBudgetItemLocal, hydrateFromDatabase]
+  );
+
+  const handleUpdateBudgetItem = useCallback(
+    async (id: string, updates: any) => {
+      const response = await fetch(`/api/budget-items/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      updateBudgetItemLocal(id, updates);
+      await hydrateFromDatabase();
+    },
+    [hydrateFromDatabase, updateBudgetItemLocal]
+  );
+
+  const handleDeleteBudgetItem = useCallback(
+    async (id: string) => {
+      const response = await fetch(`/api/budget-items/${id}`, { method: "DELETE" });
+
+      if (!response.ok) {
+        return;
+      }
+
+      deleteBudgetItemLocal(id);
+      await hydrateFromDatabase();
+    },
+    [deleteBudgetItemLocal, hydrateFromDatabase]
+  );
 
   // Initialize admin store defaults
   useEffect(() => {
@@ -264,20 +727,25 @@ export default function Home() {
 
   // Initialize with demo data if empty (only after authenticated)
   useEffect(() => {
-    if (!isInitialized && projects.length === 0 && isAuthenticated) {
-      const projectId = createDemoData(
-        addProject,
-        addTask,
-        addMilestone,
-        addResource,
-        addBudgetItem
-      );
-      selectProject(projectId);
-      setIsInitialized(true);
-    } else if (!isInitialized && isAuthenticated) {
-      setIsInitialized(true);
+    if (!isAuthenticated || isInitialized) {
+      return;
     }
-  }, [isInitialized, projects.length, isAuthenticated]);
+
+    const run = async () => {
+      try {
+        await hydrateFromDatabase();
+        if (useProjectStore.getState().projects.length === 0) {
+          await seedChartTraderProject();
+        }
+      } catch (error) {
+        console.error("Project initialization error:", error);
+      } finally {
+        setIsInitialized(true);
+      }
+    };
+
+    run();
+  }, [hydrateFromDatabase, isAuthenticated, isInitialized, seedChartTraderProject]);
 
   // Show login if not authenticated
   if (!isAuthenticated) {
@@ -351,21 +819,21 @@ export default function Home() {
             milestones={projectMilestones}
             resources={resources}
             budgetItems={projectBudgetItems}
-            onUpdateProject={(updates) => updateProject(selectedProject.id, updates)}
-            onAddTask={addTask}
-            onUpdateTask={updateTask}
-            onDeleteTask={deleteTask}
-            onMoveTask={moveTask}
-            onAddMilestone={addMilestone}
-            onUpdateMilestone={updateMilestone}
-            onDeleteMilestone={deleteMilestone}
-            onCompleteMilestone={completeMilestone}
-            onAddResource={addResource}
-            onUpdateResource={updateResource}
-            onDeleteResource={deleteResource}
-            onAddBudgetItem={(data) => addBudgetItem(selectedProject.id, data)}
-            onUpdateBudgetItem={updateBudgetItem}
-            onDeleteBudgetItem={deleteBudgetItem}
+            onUpdateProject={(updates) => handleUpdateProject(selectedProject.id, updates)}
+            onAddTask={handleAddTask}
+            onUpdateTask={handleUpdateTask}
+            onDeleteTask={handleDeleteTask}
+            onMoveTask={handleMoveTask}
+            onAddMilestone={handleAddMilestone}
+            onUpdateMilestone={handleUpdateMilestone}
+            onDeleteMilestone={handleDeleteMilestone}
+            onCompleteMilestone={handleCompleteMilestone}
+            onAddResource={handleAddResource}
+            onUpdateResource={handleUpdateResource}
+            onDeleteResource={handleDeleteResource}
+            onAddBudgetItem={(data) => handleAddBudgetItem(selectedProject.id, data)}
+            onUpdateBudgetItem={handleUpdateBudgetItem}
+            onDeleteBudgetItem={handleDeleteBudgetItem}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center bg-gray-50">
@@ -377,13 +845,12 @@ export default function Home() {
                 <Button
                   size="lg"
                   onClick={() => {
-                    const project = addProject({
+                    createProject({
                       name: "New Project",
                       description: "Project description",
                       startDate: new Date(),
                       endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
                     });
-                    selectProject(project.id);
                   }}
                   leftIcon={<Plus className="w-5 h-5" />}
                 >
@@ -415,9 +882,9 @@ export default function Home() {
             selectProject(id);
             setCurrentView("myProjects");
           }}
-          onAddProject={addProject}
-          onUpdateProject={updateProject}
-          onDeleteProject={deleteProject}
+          onAddProject={createProject}
+          onUpdateProject={handleUpdateProject}
+          onDeleteProject={handleDeleteProject}
           tasks={tasks.map((t) => ({ projectId: t.projectId, status: t.status }))}
           currentView={currentView}
           onChangeView={setCurrentView}
