@@ -24,109 +24,117 @@ export type AppView = "home" | "emails" | "tickets" | "myProjects" | "myWorkflow
 const createDemoData = (addProject: any, addTask: any, addMilestone: any, addResource: any, addBudgetItem: any) => {
   // Add demo project
   const project = addProject({
-    name: "Website Redesign",
-    description: "Complete redesign of the company website with modern UI/UX, improved performance, and mobile responsiveness.",
+    name: "ChartTrader Launch",
+    description: "Plan, test, and launch the ChartTrader product on the website with clear milestones for QA, content readiness, and go-live.",
     status: "active",
     priority: "high",
     startDate: new Date(),
-    endDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
-    budget: 75000,
-    color: "#3B82F6",
+    endDate: new Date(Date.now() + 75 * 24 * 60 * 60 * 1000),
+    budget: 35000,
+    color: "#0EA5E9",
   });
 
   // Add demo tasks
   const task1 = addTask({
-    name: "Research & Planning",
-    description: "Conduct user research, competitor analysis, and create project plan",
+    name: "Define launch scope and success criteria",
+    description: "Document launch checklist, acceptance criteria, owners, and target launch window.",
     status: "done",
     priority: "high",
     startDate: new Date(),
-    endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    estimatedHours: 40,
+    endDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    estimatedHours: 12,
     projectId: project.id,
   });
 
   const task2 = addTask({
-    name: "Wireframe Design",
-    description: "Create wireframes for all major pages and user flows",
+    name: "Website product page content and assets",
+    description: "Prepare product copy, screenshots, video snippets, FAQs, pricing, and CTA flow.",
     status: "in-progress",
     priority: "high",
-    startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-    estimatedHours: 32,
+    startDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+    endDate: new Date(Date.now() + 18 * 24 * 60 * 60 * 1000),
+    estimatedHours: 30,
     projectId: project.id,
   });
 
   const task3 = addTask({
-    name: "Visual Design",
-    description: "Create high-fidelity mockups and design system",
+    name: "Install and onboarding flow validation",
+    description: "Validate purchasing, delivery, license activation, and onboarding instructions end to end.",
     status: "todo",
-    priority: "medium",
-    startDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+    priority: "high",
+    startDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
     endDate: new Date(Date.now() + 28 * 24 * 60 * 60 * 1000),
-    estimatedHours: 60,
+    estimatedHours: 36,
     projectId: project.id,
   });
 
   const task4 = addTask({
-    name: "Frontend Development",
-    description: "Build React components and implement designs",
+    name: "Cross-environment QA testing",
+    description: "Run regression and compatibility testing across Windows/NinjaTrader versions and user account states.",
     status: "todo",
-    priority: "medium",
-    startDate: new Date(Date.now() + 28 * 24 * 60 * 60 * 1000),
-    endDate: new Date(Date.now() + 56 * 24 * 60 * 60 * 1000),
-    estimatedHours: 120,
+    priority: "high",
+    startDate: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000),
+    endDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000),
+    estimatedHours: 70,
     projectId: project.id,
   });
 
   const task5 = addTask({
-    name: "Backend Integration",
-    description: "Connect frontend with APIs and database",
+    name: "Support and launch readiness",
+    description: "Finalize docs, release notes, support playbook, and rollback plan before production launch.",
     status: "todo",
     priority: "medium",
-    startDate: new Date(Date.now() + 42 * 24 * 60 * 60 * 1000),
-    endDate: new Date(Date.now() + 70 * 24 * 60 * 60 * 1000),
-    estimatedHours: 80,
+    startDate: new Date(Date.now() + 32 * 24 * 60 * 60 * 1000),
+    endDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+    estimatedHours: 28,
     projectId: project.id,
   });
 
   const task6 = addTask({
-    name: "Testing & QA",
-    description: "Comprehensive testing across devices and browsers",
+    name: "Launch campaign and post-launch monitoring",
+    description: "Coordinate launch announcement and monitor onboarding, activation, and support volume for the first week.",
     status: "todo",
     priority: "high",
-    startDate: new Date(Date.now() + 70 * 24 * 60 * 60 * 1000),
-    endDate: new Date(Date.now() + 84 * 24 * 60 * 60 * 1000),
-    estimatedHours: 40,
+    startDate: new Date(Date.now() + 55 * 24 * 60 * 60 * 1000),
+    endDate: new Date(Date.now() + 75 * 24 * 60 * 60 * 1000),
+    estimatedHours: 24,
     projectId: project.id,
   });
 
   // Update first task progress
   const store = useProjectStore.getState();
-  store.updateTask(task1.id, { progress: 100, actualHours: 38 });
-  store.updateTask(task2.id, { progress: 60, actualHours: 20 });
+  store.updateTask(task1.id, { progress: 100, actualHours: 10 });
+  store.updateTask(task2.id, { progress: 45, actualHours: 14 });
 
   // Add demo milestones
   addMilestone({
-    name: "Design Approval",
-    description: "Get stakeholder approval on final designs",
-    dueDate: new Date(Date.now() + 28 * 24 * 60 * 60 * 1000),
+    name: "Milestone 1: Launch plan approved",
+    description: "Scope, owners, launch date target, and success criteria are confirmed.",
+    dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     color: "#10B981",
     projectId: project.id,
   });
 
   addMilestone({
-    name: "Beta Launch",
-    description: "Launch beta version for internal testing",
-    dueDate: new Date(Date.now() + 70 * 24 * 60 * 60 * 1000),
+    name: "Milestone 2: Website content and purchase flow ready",
+    description: "Product page, media assets, checkout, and license delivery flow are validated.",
+    dueDate: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000),
+    color: "#3B82F6",
+    projectId: project.id,
+  });
+
+  addMilestone({
+    name: "Milestone 3: QA sign-off",
+    description: "Testing complete with blockers resolved and launch recommendation documented.",
+    dueDate: new Date(Date.now() + 50 * 24 * 60 * 60 * 1000),
     color: "#8B5CF6",
     projectId: project.id,
   });
 
   addMilestone({
-    name: "Production Launch",
-    description: "Full production deployment",
-    dueDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+    name: "Milestone 4: Production launch",
+    description: "ChartTrader is live on the website with monitoring and support coverage in place.",
+    dueDate: new Date(Date.now() + 75 * 24 * 60 * 60 * 1000),
     color: "#F59E0B",
     projectId: project.id,
   });
@@ -174,43 +182,43 @@ const createDemoData = (addProject: any, addTask: any, addMilestone: any, addRes
 
   // Add demo budget items
   addBudgetItem(project.id, {
-    name: "Design Team",
+    name: "QA and validation",
     category: "labor",
-    planned: 25000,
-    actual: 8500,
-    notes: "UX/UI design and prototyping",
+    planned: 12000,
+    actual: 2200,
+    notes: "Test case execution, bug triage, and acceptance validation",
   });
 
   addBudgetItem(project.id, {
-    name: "Development Team",
+    name: "Implementation and fixes",
     category: "labor",
-    planned: 40000,
-    actual: 5000,
-    notes: "Frontend and backend development",
+    planned: 9000,
+    actual: 1500,
+    notes: "Engineering support for defects and launch blockers",
   });
 
   addBudgetItem(project.id, {
-    name: "Design Tools",
-    category: "software",
-    planned: 2000,
-    actual: 1800,
-    notes: "Figma, Adobe CC subscriptions",
-  });
-
-  addBudgetItem(project.id, {
-    name: "Hosting & Infrastructure",
+    name: "Content and media",
     category: "software",
     planned: 5000,
-    actual: 1200,
-    notes: "AWS, Vercel hosting",
+    actual: 800,
+    notes: "Product videos, screenshots, and website asset preparation",
   });
 
   addBudgetItem(project.id, {
-    name: "Testing Devices",
+    name: "Commerce and launch tooling",
+    category: "software",
+    planned: 4000,
+    actual: 600,
+    notes: "Storefront, analytics, and post-launch monitoring tools",
+  });
+
+  addBudgetItem(project.id, {
+    name: "Contingency reserve",
     category: "equipment",
-    planned: 3000,
-    actual: 2800,
-    notes: "Mobile devices for testing",
+    planned: 5000,
+    actual: 0,
+    notes: "Buffer for unexpected pre-launch or post-launch issues",
   });
 
   return project.id;
