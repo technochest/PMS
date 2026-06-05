@@ -178,6 +178,7 @@ export function EmailManagement() {
       }
 
       markAsConverted(convertingEmail.id, payload.ticket.id, payload.ticket.ticketNumber);
+      window.dispatchEvent(new CustomEvent("tasksteer:tickets-changed"));
 
       setShowConvertModal(false);
       setConvertingEmail(null);

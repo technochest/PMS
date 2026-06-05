@@ -105,6 +105,17 @@ export function TicketManagement() {
     loadTickets();
   }, []);
 
+  useEffect(() => {
+    const handleTicketsChanged = () => {
+      loadTickets();
+    };
+
+    window.addEventListener("tasksteer:tickets-changed", handleTicketsChanged);
+    return () => {
+      window.removeEventListener("tasksteer:tickets-changed", handleTicketsChanged);
+    };
+  }, []);
+
   const handleCreateTicket = async (data: CreateTicketInput) => {
     if (!currentUser?.id) {
       setError("You must be signed in to create tickets.");

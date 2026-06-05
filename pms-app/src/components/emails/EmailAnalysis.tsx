@@ -187,6 +187,25 @@ export function EmailAnalysis() {
     }
   }, [currentUser, emails]);
 
+  useEffect(() => {
+    if (!currentUser || emails.length === 0) {
+      return;
+    }
+
+    analyzeEmails();
+  }, [currentUser, emails.length, analyzeEmails]);
+
+  useEffect(() => {
+    const handleTicketsChanged = () => {
+      analyzeEmails();
+    };
+
+    window.addEventListener("tasksteer:tickets-changed", handleTicketsChanged);
+    return () => {
+      window.removeEventListener("tasksteer:tickets-changed", handleTicketsChanged);
+    };
+  }, [analyzeEmails]);
+
   const toggleGroup = (groupId: string) => {
     const newExpanded = new Set(expandedGroups);
     if (newExpanded.has(groupId)) {
@@ -236,6 +255,7 @@ export function EmailAnalysis() {
       
       // Refresh analysis to show updated status
       await analyzeEmails();
+      window.dispatchEvent(new CustomEvent("tasksteer:tickets-changed"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to link to ticket");
     }
@@ -272,6 +292,7 @@ export function EmailAnalysis() {
       setShowCreateTicket(false);
       setSelectedGroup(null);
       await analyzeEmails();
+      window.dispatchEvent(new CustomEvent("tasksteer:tickets-changed"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create ticket");
     } finally {
