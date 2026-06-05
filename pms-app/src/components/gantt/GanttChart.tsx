@@ -55,7 +55,7 @@ export function GanttChart({
   onTaskUpdate,
 }: GanttChartProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("week");
-  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
+  const [expandedMilestones, setExpandedMilestones] = useState<Set<string>>(new Set());
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const today = new Date();
@@ -82,60 +82,128 @@ export function GanttChart({
     }
   }, [projectStartDate, projectEndDate, viewMode]);
 
-  // Prepare rows data
+  useEffect(() => {
+    setExpandedMilestones((prev) => {
+      const next = new Set(prev);
+      milestones.forEach((milestone) => {
+        if (!next.has(milestone.id)) {
+          next.add(milestone.id);
+        }
+      });
+      return next;
+    });
+  }, [milestones]);
+
+  // Prepare rows data grouped by milestone
   const rows = useMemo(() => {
     const result: GanttRow[] = [];
 
-    // Add tasks
-    const processTask = (task: Task, level: number) => {
-      const hasChildren = tasks.some((t) => t.parentId === task.id);
-      const isExpanded = expandedTasks.has(task.id);
+    const sortedMilestones = [...milestones].sort(
+      (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+    );
 
-      result.push({
-        id: task.id,
-        name: task.name,
-        type: "task",
-        startDate: new Date(task.startDate),
-        endDate: new Date(task.endDate),
-        progress: task.progress,
-        color: getTaskColor(task.status),
-        parentId: task.parentId,
-        isExpanded,
-        level,
-        data: task,
-      });
-
-      if (hasChildren && isExpanded) {
-        tasks
-          .filter((t) => t.parentId === task.id)
-          .sort((a, b) => a.order - b.order)
-          .forEach((child) => processTask(child, level + 1));
+    const tasksByMilestone = tasks.reduce((map, task) => {
+      if (task.milestoneId) {
+        const existing = map.get(task.milestoneId) || [];
+        existing.push(task);
+        map.set(task.milestoneId, existing);
       }
-    };
+      return map;
+    }, new Map<string, Task[]>());
 
-    // Process root tasks
-    tasks
-      .filter((t) => !t.parentId)
-      .sort((a, b) => a.order - b.order)
-      .forEach((task) => processTask(task, 0));
+    sortedMilestones.forEach((milestone) => {
+      const milestoneTasks = (tasksByMilestone.get(milestone.id) || []).sort(
+        (a, b) => a.order - b.order
+      );
+      const completedTasks = milestoneTasks.filter((task) => task.status === "done").length;
+      const totalTasks = milestoneTasks.length;
+      const milestoneProgress =
+        totalTasks > 0
+          ? Math.round((completedTasks / totalTasks) * 100)
+          : milestone.completed
+            ? 100
+            : 0;
 
-    // Add milestones
-    milestones.forEach((milestone) => {
       result.push({
         id: milestone.id,
-        name: milestone.name,
+        name:
+          totalTasks > 0
+            ? `${milestone.name} (${completedTasks}/${totalTasks} done, ${Math.max(0, totalTasks - completedTasks)} remaining)`
+            : `${milestone.name} (no tasks)`,
         type: "milestone",
         startDate: new Date(milestone.dueDate),
         endDate: new Date(milestone.dueDate),
-        progress: milestone.completed ? 100 : 0,
+        progress: milestoneProgress,
         color: milestone.color,
+        isExpanded: expandedMilestones.has(milestone.id),
         level: 0,
         data: milestone,
       });
+
+      if (expandedMilestones.has(milestone.id)) {
+        milestoneTasks.forEach((task) => {
+          result.push({
+            id: task.id,
+            name: task.name,
+            type: "task",
+            startDate: new Date(task.startDate),
+            endDate: new Date(task.endDate),
+            progress: task.progress,
+            color: getTaskColor(task.status),
+            parentId: milestone.id,
+            level: 1,
+            data: task,
+          });
+        });
+      }
     });
 
+    // Show tasks without milestone as a separate group for visibility.
+    const unassignedTasks = tasks
+      .filter((task) => !task.milestoneId)
+      .sort((a, b) => a.order - b.order);
+
+    if (unassignedTasks.length > 0) {
+      result.push({
+        id: "unassigned-milestone-group",
+        name: `Unassigned tasks (${unassignedTasks.length})`,
+        type: "milestone",
+        startDate: projectStartDate,
+        endDate: projectStartDate,
+        progress: 0,
+        color: "#9CA3AF",
+        isExpanded: true,
+        level: 0,
+        data: {
+          id: "unassigned",
+          name: "Unassigned tasks",
+          dueDate: projectStartDate,
+          completed: false,
+          color: "#9CA3AF",
+          createdAt: projectStartDate,
+          updatedAt: projectStartDate,
+          projectId: "",
+        } as Milestone,
+      });
+
+      unassignedTasks.forEach((task) => {
+        result.push({
+          id: task.id,
+          name: task.name,
+          type: "task",
+          startDate: new Date(task.startDate),
+          endDate: new Date(task.endDate),
+          progress: task.progress,
+          color: getTaskColor(task.status),
+          parentId: "unassigned-milestone-group",
+          level: 1,
+          data: task,
+        });
+      });
+    }
+
     return result;
-  }, [tasks, milestones, expandedTasks]);
+  }, [tasks, milestones, expandedMilestones, projectStartDate]);
 
   // Calculate bar position and width
   const calculateBarPosition = (startDate: Date, endDate: Date) => {
@@ -161,14 +229,14 @@ export function GanttChart({
     return { left: Math.max(0, left), width: Math.max(cellWidth / 4, width) };
   };
 
-  // Toggle task expansion
-  const toggleExpand = (taskId: string) => {
-    setExpandedTasks((prev) => {
+  // Toggle milestone expansion
+  const toggleExpand = (milestoneId: string) => {
+    setExpandedMilestones((prev) => {
       const next = new Set(prev);
-      if (next.has(taskId)) {
-        next.delete(taskId);
+      if (next.has(milestoneId)) {
+        next.delete(milestoneId);
       } else {
-        next.add(taskId);
+        next.add(milestoneId);
       }
       return next;
     });
@@ -238,8 +306,8 @@ export function GanttChart({
           <div style={{ height: chartHeight }} className="overflow-hidden">
             {rows.map((row) => {
               const hasChildren =
-                row.type === "task" &&
-                tasks.some((t) => t.parentId === row.id);
+                row.type === "milestone" &&
+                tasks.some((task) => task.milestoneId === row.id);
 
               return (
                 <div
@@ -262,7 +330,7 @@ export function GanttChart({
                     }
                   }}
                 >
-                  {row.type === "task" && hasChildren && (
+                  {row.type === "milestone" && hasChildren && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -283,7 +351,14 @@ export function GanttChart({
                       style={{ color: row.color }}
                     />
                   )}
-                  <span className="truncate text-sm text-gray-900 cursor-pointer hover:text-blue-600">
+                  <span
+                    className={cn(
+                      "truncate text-sm cursor-pointer hover:text-blue-600",
+                      row.type === "milestone"
+                        ? "text-gray-900 font-medium"
+                        : "text-gray-700"
+                    )}
+                  >
                     {row.name}
                   </span>
                 </div>
