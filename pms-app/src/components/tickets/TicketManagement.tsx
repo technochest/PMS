@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { useTicketStore } from "@/lib/ticketStore";
+import React, { useEffect, useMemo, useState } from "react";
+import { useAdminStore } from "@/lib/adminStore";
 import {
   Ticket,
   CreateTicketInput,
@@ -20,13 +20,9 @@ import { cn, formatDate } from "@/lib/utils";
 import {
   Plus,
   Search,
-  Filter,
-  ChevronRight,
   Mail,
-  Phone,
   User,
   Calendar,
-  Tag,
   Building,
   Clock,
   AlertCircle,
@@ -36,9 +32,7 @@ import {
   X,
   Edit2,
   Trash2,
-  ExternalLink,
   MessageSquare,
-  Paperclip,
 } from "lucide-react";
 
 type TabType = "all" | "open" | "in-progress" | "resolved" | "closed";
@@ -67,22 +61,150 @@ const priorityColors: Record<Priority, string> = {
 };
 
 export function TicketManagement() {
-  const {
-    tickets,
-    selectedTicketId,
-    addTicket,
-    updateTicket,
-    deleteTicket,
-    selectTicket,
-  } = useTicketStore();
+  const { currentUser } = useAdminStore();
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<TabType>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadTickets = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const response = await fetch("/api/tickets", { cache: "no-store" });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to load tickets");
+      }
+
+      const normalized = (data.tickets || []).map((ticket: Ticket) => ({
+        ...ticket,
+        dateRequested: ticket.dateRequested ? new Date(ticket.dateRequested) : new Date(),
+        expectedEndDate: ticket.expectedEndDate ? new Date(ticket.expectedEndDate) : null,
+        startDate: ticket.startDate ? new Date(ticket.startDate) : null,
+        endDate: ticket.endDate ? new Date(ticket.endDate) : null,
+        createdAt: ticket.createdAt ? new Date(ticket.createdAt) : new Date(),
+        updatedAt: ticket.updatedAt ? new Date(ticket.updatedAt) : new Date(),
+      }));
+
+      setTickets(normalized);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Failed to load tickets");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTickets();
+  }, []);
+
+  const handleCreateTicket = async (data: CreateTicketInput) => {
+    if (!currentUser?.id) {
+      setError("You must be signed in to create tickets.");
+      return;
+    }
+
+    try {
+      setError(null);
+      const response = await fetch("/api/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: data.title,
+          description: data.summary || "",
+          priority: data.priority || "medium",
+          status: "open",
+          category: data.category || "general",
+          assignedTo: data.assignedToId || null,
+          reportedBy: data.requestorName || data.requestorEmail || currentUser.email,
+          dueDate: data.expectedEndDate ? new Date(data.expectedEndDate).toISOString() : null,
+          sourceType: data.source || "manual",
+          sourceId: null,
+          createdById: currentUser.id,
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.error || "Failed to create ticket");
+      }
+
+      setShowForm(false);
+      setEditingTicket(null);
+      await loadTickets();
+      setSelectedTicketId(payload.ticket.id);
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Failed to create ticket");
+    }
+  };
+
+  const handleUpdateTicket = async (ticketId: string, data: Partial<Ticket> | CreateTicketInput) => {
+    try {
+      setError(null);
+      const updateData: Record<string, unknown> = {};
+
+      if ("title" in data && typeof data.title === "string") updateData.title = data.title;
+      if ("summary" in data && typeof data.summary === "string") updateData.description = data.summary;
+      if ("status" in data && typeof data.status === "string") updateData.status = data.status;
+      if ("priority" in data && typeof data.priority === "string") updateData.priority = data.priority;
+      if ("category" in data && typeof data.category === "string") updateData.category = data.category;
+      if ("assignedToId" in data) updateData.assignedTo = data.assignedToId || null;
+      if ("requestorName" in data && typeof data.requestorName === "string") updateData.reportedBy = data.requestorName;
+      if ("expectedEndDate" in data) {
+        updateData.dueDate = data.expectedEndDate
+          ? new Date(data.expectedEndDate as Date).toISOString()
+          : null;
+      }
+      if ("source" in data && typeof data.source === "string") updateData.sourceType = data.source;
+
+      const response = await fetch(`/api/tickets/${ticketId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updateData),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.error || "Failed to update ticket");
+      }
+
+      setShowForm(false);
+      setEditingTicket(null);
+      await loadTickets();
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "Failed to update ticket");
+    }
+  };
+
+  const handleDeleteTicket = async (ticketId: string) => {
+    try {
+      setError(null);
+      const response = await fetch(`/api/tickets/${ticketId}`, { method: "DELETE" });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload?.error || "Failed to delete ticket");
+      }
+
+      if (selectedTicketId === ticketId) {
+        setSelectedTicketId(null);
+      }
+
+      await loadTickets();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Failed to delete ticket");
+    }
+  };
 
   // Filter tickets
-  const filteredTickets = tickets.filter((ticket) => {
+  const filteredTickets = useMemo(() => tickets.filter((ticket) => {
     const matchesSearch =
       ticket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       ticket.ticketNumber.toString().includes(searchTerm) ||
@@ -97,7 +219,7 @@ export function TicketManagement() {
       (activeTab === "closed" && ticket.status === "closed");
 
     return matchesSearch && matchesTab;
-  });
+  }), [tickets, searchTerm, activeTab]);
 
   const selectedTicket = tickets.find((t) => t.id === selectedTicketId);
 
@@ -128,6 +250,12 @@ export function TicketManagement() {
               New Ticket
             </button>
           </div>
+
+          {error && (
+            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
 
           {/* Search */}
           <div className="relative">
@@ -165,7 +293,11 @@ export function TicketManagement() {
 
         {/* Ticket List */}
         <div className="flex-1 overflow-y-auto">
-          {filteredTickets.length === 0 ? (
+          {isLoading ? (
+            <div className="text-center py-12 text-gray-500">
+              <p className="font-medium">Loading tickets...</p>
+            </div>
+          ) : filteredTickets.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
               <Mail className="w-12 h-12 mx-auto mb-3 text-gray-300" />
               <p className="font-medium">No tickets found</p>
@@ -176,7 +308,7 @@ export function TicketManagement() {
               {filteredTickets.map((ticket) => (
                 <div
                   key={ticket.id}
-                  onClick={() => selectTicket(ticket.id)}
+                  onClick={() => setSelectedTicketId(ticket.id)}
                   className={cn(
                     "p-4 cursor-pointer transition-colors",
                     selectedTicketId === ticket.id
@@ -248,14 +380,12 @@ export function TicketManagement() {
         {showForm ? (
           <TicketForm
             ticket={editingTicket}
-            onSave={(data) => {
+            onSave={async (data) => {
               if (editingTicket) {
-                updateTicket(editingTicket.id, data as Partial<Ticket>);
+                await handleUpdateTicket(editingTicket.id, data as Partial<Ticket>);
               } else {
-                addTicket(data as CreateTicketInput);
+                await handleCreateTicket(data as CreateTicketInput);
               }
-              setShowForm(false);
-              setEditingTicket(null);
             }}
             onCancel={() => {
               setShowForm(false);
@@ -269,11 +399,12 @@ export function TicketManagement() {
               setEditingTicket(selectedTicket);
               setShowForm(true);
             }}
-            onDelete={() => {
-              deleteTicket(selectedTicket.id);
-              selectTicket(null);
+            onDelete={async () => {
+              await handleDeleteTicket(selectedTicket.id);
             }}
-            onStatusChange={(status) => updateTicket(selectedTicket.id, { status })}
+            onStatusChange={async (status) => {
+              await handleUpdateTicket(selectedTicket.id, { status });
+            }}
           />
         ) : (
           <div className="h-full flex items-center justify-center bg-gray-50">
